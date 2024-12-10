@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>KAIROS: Mech Frontier</title>
+<style>
+  body, html {
+    margin: 0; padding: 0;
+    background: #000;
+    font-family: monospace;
+    user-select: none;
+    color: #0f0;
+  }
+  #info {
+    text-align: center;
+    color: #0f0;
+    margin: 10px;
+    position: fixed;
+    width: 100%;
+  }
+  canvas {
+    display: block;
+    margin: 0 auto;
+    background: #000;
+  }
+</style>
+</head>
+<body>
+<div id="info">
+  <p>W/S: Forward/Back | A/D: Strafe Left/Right | Left/Right Arrow: Turn Left/Right | Shift: Jump | Space: Shoot</p>
+</div>
+<canvas id="gameCanvas"></canvas>
+<script src="main.js"></script>
+</body>
+</html>
