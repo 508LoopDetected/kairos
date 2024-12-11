@@ -11,6 +11,147 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
+
+
+// Weapon base class
+class Weapon {
+    constructor(config) {
+        this.name = config.name;
+        this.damage = config.damage;
+        this.ammo = config.startingAmmo;
+        this.maxAmmo = config.startingAmmo;
+        this.projectileSpeed = config.projectileSpeed;
+        this.cooldown = config.cooldown;
+        this.currentCooldown = 0;
+        this.projectileColor = config.projectileColor;
+        this.projectileSize = config.projectileSize || 0.2;
+        this.spreadAngle = config.spreadAngle || 0;
+        this.projectilesPerShot = config.projectilesPerShot || 1;
+    }
+
+    canFire() {
+        return this.ammo > 0 && this.currentCooldown <= 0;
+    }
+
+    update() {
+        if (this.currentCooldown > 0) {
+            this.currentCooldown--;
+        }
+    }
+
+    createProjectile(position, direction) {
+        if (!this.canFire()) return null;
+
+        this.ammo--;
+        this.currentCooldown = this.cooldown;
+
+        let projectiles = [];
+        
+        for (let i = 0; i < this.projectilesPerShot; i++) {
+            // Calculate spread for this projectile
+            let spreadDir = {...direction};
+            if (this.spreadAngle > 0) {
+                let angle = (Math.random() - 0.5) * this.spreadAngle;
+                spreadDir = rotateY(direction, angle);
+                // Add some vertical spread too
+                let verticalAngle = (Math.random() - 0.5) * this.spreadAngle * 0.5;
+                spreadDir = rotateX(spreadDir, verticalAngle);
+            }
+
+            projectiles.push({
+                name: "projectile",
+                position: {...position},
+                rotation: vec3(0, 0, 0),
+                velocity: mul3(spreadDir, this.projectileSpeed),
+                life: 200,
+                boundingBox: {
+                    min: vec3(-this.projectileSize/2, -this.projectileSize/2, -this.projectileSize/2),
+                    max: vec3(this.projectileSize/2, this.projectileSize/2, this.projectileSize/2)
+                },
+                ...makeBox(this.projectileSize, this.projectileSize, this.projectileSize),
+                color: this.projectileColor,
+                damage: this.damage
+            });
+        }
+
+        return projectiles;
+    }
+}
+
+// Define specific weapon types
+class Rifle extends Weapon {
+    constructor() {
+        super({
+            name: "Rifle",
+            damage: 1,
+            startingAmmo: 99,
+            projectileSpeed: 0.3,
+            cooldown: 20,
+            projectileColor: "#ff0",
+            projectileSize: 0.2,
+            spreadAngle: 0.1,
+            projectilesPerShot: 1
+        });
+    }
+}
+
+class Shotgun extends Weapon {
+    constructor() {
+        super({
+            name: "Shotgun",
+            damage: 0.5,  // Less damage per pellet
+            startingAmmo: 24,
+            projectileSpeed: 0.25,
+            cooldown: 120,
+            projectileColor: "#f80",
+            projectileSize: 0.15,  // Smaller pellets
+            spreadAngle: 0.3,  // Wide spread
+            projectilesPerShot: 8  // Multiple pellets per shot
+        });
+    }
+}
+
+// Weapon management system for the player
+class WeaponSystem {
+    constructor() {
+        this.weapons = [
+            new Rifle(),
+            new Shotgun()
+        ];
+        this.currentWeaponIndex = 0;
+    }
+
+    getCurrentWeapon() {
+        return this.weapons[this.currentWeaponIndex];
+    }
+
+    update() {
+        this.getCurrentWeapon().update();
+    }
+
+    switchWeapon(index) {
+        if (index >= 0 && index < this.weapons.length) {
+            this.currentWeaponIndex = index;
+            return true;
+        }
+        return false;
+    }
+
+    nextWeapon() {
+        this.currentWeaponIndex = (this.currentWeaponIndex + 1) % this.weapons.length;
+    }
+
+    fireCurrentWeapon(position, direction) {
+        return this.getCurrentWeapon().createProjectile(position, direction);
+    }
+
+    getCurrentAmmo() {
+        const weapon = this.getCurrentWeapon();
+        return `${weapon.name}: ${weapon.ammo}/${weapon.maxAmmo}`;
+    }
+}
+
+
 // Spatial relativity helpers
 function vec3(x=0,y=0,z=0){return {x,y,z};}
 function add3(a,b){return {x:a.x+b.x,y:a.y+b.y,z:a.z+b.z};}
@@ -246,7 +387,8 @@ let player = {
     color: "#0f0",
     health: 3,
     hitFlashTimer: 0,
-    isDead: false
+    isDead: false,
+    weaponSystem: new WeaponSystem()
 };
 sceneObjects.push(player);
 
@@ -294,10 +436,12 @@ let cameraLerpFactor = 0.2;
 
 // Simple key state object
 let keys = {
-  w: false, s: false, a: false, d: false,
-  ArrowLeft: false, ArrowRight: false,
-  Space: false,
-  Shift: false
+    w: false, s: false, a: false, d: false,
+    ArrowLeft: false, ArrowRight: false,
+    Space: false,
+    Shift: false,
+    "1": false,
+    "2": false
 };
 
 // Normalize key names
@@ -432,12 +576,21 @@ function updatePlayer() {
   
   player.position = newPos;
   
-  // Handle shooting
-  if(keys.Space && !player.fireCooldown) {
-    fireProjectile();
-    player.fireCooldown = 20;
-  }
-  if(player.fireCooldown > 0) player.fireCooldown--;
+
+    // Update weapon system
+    player.weaponSystem.update();
+    
+    // Handle shooting
+    if (keys.Space) {
+        fireProjectile();
+    }
+
+    if (keys["1"]) {
+        player.weaponSystem.switchWeapon(0);
+    }
+    if (keys["2"]) {
+        player.weaponSystem.switchWeapon(1);
+    }
 }
 
 // Update debug display
@@ -448,6 +601,7 @@ function drawDebugInfo(ctx, w, h) {
     ctx.fillText(`Vel X: ${playerVel.x.toFixed(3)}`, 10, 40);
     ctx.fillText(`Vel Z: ${playerVel.z.toFixed(3)}`, 10, 60);
     ctx.fillText(`Health: ${player.health}`, 10, 80);
+    ctx.fillText(`Ammo: ${player.weaponSystem.getCurrentAmmo()}`, 10, 100);
 }
 
 // Add debug info to scene
@@ -542,21 +696,17 @@ function updateEnemies() {
     }
 }
 
-function fireProjectile(){
-  let forwardDir = rotateY({x:0,y:0,z:1}, player.rotation.y);
-  let startPos = add3(player.position, {x:forwardDir.x*0.5,y:1,z:forwardDir.z*0.5});
-  let projectile = {
-    name:"projectile",
-    position:startPos,
-    rotation:vec3(0,0,0),
-    velocity: mul3(forwardDir,0.3),
-    life: 200,
-    boundingBox:{min:vec3(-0.1,-0.1,-0.1),max:vec3(0.1,0.1,0.1)},
-    ...makeBox(0.2,0.2,0.2),
-    color:"#ff0"
-  };
-  sceneObjects.push(projectile);
-  projectiles.push(projectile);
+function fireProjectile() {
+    let forwardDir = rotateY({x:0, y:0, z:1}, player.rotation.y);
+    let startPos = add3(player.position, {x:forwardDir.x*0.5, y:1, z:forwardDir.z*0.5});
+    
+    const newProjectiles = player.weaponSystem.fireCurrentWeapon(startPos, forwardDir);
+    if (newProjectiles) {
+        for (const projectile of newProjectiles) {
+            sceneObjects.push(projectile);
+            projectiles.push(projectile); // This is the global projectiles array
+        }
+    }
 }
 
 const ENEMY_FIRING_RANGE = 50; // Maximum distance for enemy to fire
